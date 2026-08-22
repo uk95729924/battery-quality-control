@@ -2,165 +2,370 @@ import os
 import joblib
 import pandas as pd
 
-from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.preprocessing import LabelEncoder
 
+
+# ============================================================
+# PREPROCESS DATASET
+# ============================================================
 
 def preprocess_dataset(file_path):
 
-    # ==========================================
-    # Load Dataset
-    # ==========================================
+    # ========================================================
+    # LOAD DATASET
+    # ========================================================
 
-    df = pd.read_csv(file_path)
-    print("\n========== DATASET CHECK ==========")
-    print("File :", file_path)
-    print("Shape :", df.shape)
-    print("Rows :", len(df))
-    print("Columns :", len(df.columns))
+    if not os.path.exists(file_path):
+
+        raise FileNotFoundError(
+            f"Dataset not found: {file_path}"
+        )
+
+    # --------------------------------------------------------
+    # Support CSV and XLSX
+    # --------------------------------------------------------
+
+    if file_path.lower().endswith(".csv"):
+
+        df = pd.read_csv(file_path)
+
+    elif file_path.lower().endswith(".xlsx"):
+
+        df = pd.read_excel(file_path)
+
+    else:
+
+        raise ValueError(
+            "Only CSV and XLSX files are supported."
+        )
+
+    print(
+        "\n========== DATASET CHECK =========="
+    )
+
+    print(
+        "File:",
+        file_path
+    )
+
+    print(
+        "Shape:",
+        df.shape
+    )
+
+    print(
+        "Rows:",
+        len(df)
+    )
+
+    print(
+        "Columns:",
+        len(df.columns)
+    )
+
+    # ========================================================
+    # REMOVE UNNAMED INDEX COLUMN
+    # ========================================================
+
+    unnamed_columns = [
+
+        column
+
+        for column in df.columns
+
+        if str(column).startswith(
+            "Unnamed:"
+        )
+
+    ]
+
+    if unnamed_columns:
+
+        print(
+            "\nRemoving index columns:",
+            unnamed_columns
+        )
+
+        df = df.drop(
+            columns=unnamed_columns
+        )
+
+    # ========================================================
+    # BASIC INFORMATION
+    # ========================================================
 
     total_rows = len(df)
+
     total_columns = len(df.columns)
 
-    # ==========================================
-    # Missing Values Before
-    # ==========================================
+    # ========================================================
+    # MISSING VALUES BEFORE
+    # ========================================================
 
-    missing_before = df.isnull().sum().sum()
+    missing_before = int(
 
-    # ==========================================
-    # Duplicate Rows Before
-    # ==========================================
+        df.isnull()
+        .sum()
+        .sum()
 
-    duplicate_before = df.duplicated().sum()
+    )
 
-    df = df.drop_duplicates()
+    print(
+        "\nMissing values before:",
+        missing_before
+    )
 
-    # ==========================================
-    # Fill Missing Values
-    # ==========================================
+    # ========================================================
+    # DUPLICATES BEFORE
+    # ========================================================
+
+    duplicate_before = int(
+
+        df.duplicated()
+        .sum()
+
+    )
+
+    print(
+        "Duplicate rows:",
+        duplicate_before
+    )
+
+    # ========================================================
+    # REMOVE DUPLICATES
+    # ========================================================
+
+    if duplicate_before > 0:
+
+        df = df.drop_duplicates()
+
+    # ========================================================
+    # HANDLE MISSING VALUES
+    # ========================================================
+
+    missing_filled = 0
 
     for column in df.columns:
 
+        missing_count = int(
+            df[column].isnull().sum()
+        )
+
+        if missing_count == 0:
+
+            continue
+
+        # ----------------------------------------------------
+        # Categorical column
+        # ----------------------------------------------------
+
         if df[column].dtype == "object":
 
-            df[column] = df[column].fillna(
-                df[column].mode()[0]
+            mode_values = (
+                df[column]
+                .mode()
             )
+
+            if len(mode_values) > 0:
+
+                fill_value = mode_values.iloc[0]
+
+            else:
+
+                fill_value = "Unknown"
+
+            df[column] = df[column].fillna(
+                fill_value
+            )
+
+        # ----------------------------------------------------
+        # Numerical column
+        # ----------------------------------------------------
 
         else:
 
+            fill_value = df[column].mean()
+
             df[column] = df[column].fillna(
-                df[column].mean()
+                fill_value
             )
 
-    missing_after = df.isnull().sum().sum()
+        missing_filled += missing_count
 
-    # ==========================================
-    # Detect Target Column
-    # ==========================================
+    # ========================================================
+    # MISSING VALUES AFTER
+    # ========================================================
+
+    missing_after = int(
+
+        df.isnull()
+        .sum()
+        .sum()
+
+    )
+
+    print(
+        "Missing values after:",
+        missing_after
+    )
+
+    print(
+        "Missing values handled:",
+        missing_filled
+    )
+
+    # ========================================================
+    # DETECT TARGET COLUMN
+    # ========================================================
 
     possible_targets = [
 
         "Quality_Status",
+
         "Defect_Type",
+
         "Machine failure",
+
         "Machine_failure",
+
         "Target",
+
         "Label",
+
         "Class"
 
     ]
 
     target_column = None
 
-    for col in possible_targets:
+    for column in possible_targets:
 
-        if col in df.columns:
+        if column in df.columns:
 
-            target_column = col
+            target_column = column
 
             break
+
+    # --------------------------------------------------------
+    # Fallback: Last column
+    # --------------------------------------------------------
 
     if target_column is None:
 
         target_column = df.columns[-1]
 
-    print("Target Column :", target_column)
+    print(
+        "\nTarget Column:",
+        target_column
+    )
 
-    # ==========================================
-    # Label Encoding
-    # ==========================================
+    # ========================================================
+    # LABEL ENCODING
+    # ========================================================
 
     encoders = {}
 
     encoded_columns = 0
 
-    for column in df.select_dtypes(include=["object"]).columns:
+    object_columns = (
+
+        df.select_dtypes(
+            include=["object"]
+        )
+        .columns
+        .tolist()
+
+    )
+
+    print(
+        "\nCategorical Columns:"
+    )
+
+    print(
+        object_columns
+    )
+
+    for column in object_columns:
 
         encoder = LabelEncoder()
 
         df[column] = encoder.fit_transform(
-            df[column]
+
+            df[column].astype(str)
+
         )
 
         encoders[column] = encoder
 
         encoded_columns += 1
 
-    # ==========================================
-    # Feature Scaling
-    # (Target Column Excluded)
-    # ==========================================
+        print(
+            f"{column}:"
+        )
 
-    scaler = StandardScaler()
+        for index, label in enumerate(
+            encoder.classes_
+        ):
 
-    numerical_columns = df.select_dtypes(
-        include=["int64", "float64"]
-    ).columns.tolist()
+            print(
+                f"    {index} -> {label}"
+            )
 
-    if target_column in numerical_columns:
+    # ========================================================
+    # IMPORTANT
+    #
+    # NO FEATURE SCALING HERE
+    #
+    # Scaling is intentionally performed in
+    # train_model.py AFTER train/test split.
+    #
+    # This prevents data leakage.
+    # ========================================================
 
-        numerical_columns.remove(target_column)
-
-    print("Scaling Columns :")
-
-    print(numerical_columns)
-
-    df[numerical_columns] = scaler.fit_transform(
-        df[numerical_columns]
+    print(
+        "\n========== FEATURE SCALING =========="
     )
 
-    scaled_columns = len(numerical_columns)
+    print(
+        "Scaling skipped during preprocessing."
+    )
 
-    # ==========================================
-    # Save Scaler & Encoders
-    # ==========================================
+    print(
+        "StandardScaler will be fitted only "
+        "on training data inside train_model.py."
+    )
+
+    scaled_columns = 0
+
+    # ========================================================
+    # SAVE LABEL ENCODERS
+    # ========================================================
 
     base_dir = os.path.dirname(
         os.path.dirname(__file__)
     )
 
     model_folder = os.path.join(
+
         base_dir,
+
         "models"
+
     )
 
     os.makedirs(
+
         model_folder,
+
         exist_ok=True
+
     )
 
-    joblib.dump(
+    encoder_path = os.path.join(
 
-        scaler,
+        model_folder,
 
-        os.path.join(
-
-            model_folder,
-
-            "scaler.pkl"
-
-        )
+        "label_encoders.pkl"
 
     )
 
@@ -168,48 +373,138 @@ def preprocess_dataset(file_path):
 
         encoders,
 
-        os.path.join(
-
-            model_folder,
-
-            "label_encoders.pkl"
-
-        )
+        encoder_path
 
     )
 
-    print("Scaler Saved")
+    print(
+        "\nLabel Encoders Saved:"
+    )
 
-    print("Label Encoders Saved")
+    print(
+        encoder_path
+    )
 
-    # ==========================================
-    # Summary
-    # ==========================================
+    # ========================================================
+    # TARGET ENCODER INFORMATION
+    # ========================================================
+
+    target_mapping = {}
+
+    if target_column in encoders:
+
+        target_encoder = encoders[
+            target_column
+        ]
+
+        for index, label in enumerate(
+
+            target_encoder.classes_
+
+        ):
+
+            target_mapping[
+                str(index)
+            ] = str(label)
+
+    # ========================================================
+    # FINAL DATA CHECK
+    # ========================================================
+
+    print(
+        "\n========== FINAL DATASET CHECK =========="
+    )
+
+    print(
+        "Final Shape:",
+        df.shape
+    )
+
+    print(
+        "Target:",
+        target_column
+    )
+
+    print(
+        "Remaining Missing:",
+        int(
+            df.isnull()
+            .sum()
+            .sum()
+        )
+    )
+
+    print(
+        "=========================================\n"
+    )
+
+    # ========================================================
+    # SUMMARY
+    # ========================================================
 
     summary = {
 
-        "rows": total_rows,
+        "rows":
 
-        "columns": total_columns,
+            total_rows,
+
+        "columns":
+
+            total_columns,
+
+        "final_rows":
+
+            int(
+                len(df)
+            ),
+
+        "final_columns":
+
+            int(
+                len(df.columns)
+            ),
 
         "missing_removed":
-            int(missing_before - missing_after),
+
+            int(
+                missing_filled
+            ),
 
         "duplicate_removed":
-            int(duplicate_before),
+
+            int(
+                duplicate_before
+            ),
 
         "encoded_columns":
-            encoded_columns,
+
+            int(
+                encoded_columns
+            ),
 
         "scaled_columns":
-            scaled_columns,
+
+            int(
+                scaled_columns
+            ),
 
         "target_column":
-            target_column
+
+            target_column,
+
+        "target_mapping":
+
+            target_mapping
 
     }
 
     return df, summary
 
 
-print("preprocess.py loaded")
+# ============================================================
+# MODULE LOADED
+# ============================================================
+
+print(
+    "preprocess.py loaded successfully"
+)

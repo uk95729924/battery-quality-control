@@ -42,8 +42,8 @@ function Dashboard() {
 
         <DashboardCard
           title="ML Models"
-          value="3"
-          subtitle="Random Forest, XGBoost, SVM"
+          value="4"
+          subtitle="Random Forest, XGBoost, LightGBM, SVM"
           icon={<FaBrain className="text-green-600" />}
         />
 

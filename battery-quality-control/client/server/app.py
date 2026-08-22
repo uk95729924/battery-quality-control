@@ -1,5 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from werkzeug.utils import secure_filename
+
 import os
 
 from preprocessing.preprocess import preprocess_dataset
@@ -8,173 +10,439 @@ from diagnosis.diagnosis import predict_quality
 from prognosis.prognosis import predict_future_quality
 from reports.report import generate_report
 
+
+# ============================================================
+# FLASK APPLICATION
+# ============================================================
+
 app = Flask(__name__)
+
 CORS(app)
 
-UPLOAD_FOLDER = "uploads"
 
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
+# ============================================================
+# BASE DIRECTORY
+# ============================================================
+
+BASE_DIR = os.path.dirname(
+    os.path.abspath(__file__)
+)
+
+
+# ============================================================
+# UPLOAD DIRECTORY
+# ============================================================
+
+UPLOAD_FOLDER = os.path.join(
+    BASE_DIR,
+    "uploads"
+)
+
+os.makedirs(
+    UPLOAD_FOLDER,
+    exist_ok=True
+)
 
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
 
-# ============================================
-# Home API
-# ============================================
-@app.route("/")
+# ============================================================
+# ALLOWED FILE TYPES
+# ============================================================
+
+ALLOWED_EXTENSIONS = {
+    "csv",
+    "xlsx"
+}
+
+
+def allowed_file(filename):
+
+    return (
+        "." in filename
+        and filename.rsplit(
+            ".",
+            1
+        )[1].lower()
+        in ALLOWED_EXTENSIONS
+    )
+
+
+# ============================================================
+# HOME API
+# ============================================================
+
+@app.route("/", methods=["GET"])
 def home():
-    return {
+
+    return jsonify({
+
         "status": "Running",
-        "project": "Intelligent Electrode Quality Control System"
-    }
+
+        "project":
+            "Intelligent Electrode Quality Control System",
+
+        "backend":
+            "Flask",
+
+        "version":
+            "1.0"
+
+    })
 
 
-# ============================================
-# Upload Dataset API
-# ============================================
-@app.route("/upload", methods=["POST"])
+# ============================================================
+# UPLOAD DATASET API
+# ============================================================
+
+@app.route(
+    "/upload",
+    methods=["POST"]
+)
 def upload_file():
 
-    if "file" not in request.files:
+    try:
+
+        # ----------------------------------------------------
+        # Check file
+        # ----------------------------------------------------
+
+        if "file" not in request.files:
+
+            return jsonify({
+
+                "message":
+                    "No file selected."
+
+            }), 400
+
+        file = request.files["file"]
+
+        # ----------------------------------------------------
+        # Check filename
+        # ----------------------------------------------------
+
+        if file.filename == "":
+
+            return jsonify({
+
+                "message":
+                    "Empty filename."
+
+            }), 400
+
+        # ----------------------------------------------------
+        # Validate extension
+        # ----------------------------------------------------
+
+        if not allowed_file(
+            file.filename
+        ):
+
+            return jsonify({
+
+                "message":
+                    "Only CSV and XLSX files are supported."
+
+            }), 400
+
+        # ----------------------------------------------------
+        # Secure filename
+        # ----------------------------------------------------
+
+        filename = secure_filename(
+            file.filename
+        )
+
+        filepath = os.path.join(
+
+            app.config["UPLOAD_FOLDER"],
+
+            filename
+
+        )
+
+        # ----------------------------------------------------
+        # Save file
+        # ----------------------------------------------------
+
+        file.save(
+            filepath
+        )
+
+        print(
+            "\n========== DATASET UPLOADED =========="
+        )
+
+        print(
+            "Filename:",
+            filename
+        )
+
+        print(
+            "Path:",
+            filepath
+        )
+
+        print(
+            "======================================\n"
+        )
+
         return jsonify({
-            "message": "No file selected"
-        }), 400
 
-    file = request.files["file"]
+            "message":
+                "Dataset Uploaded Successfully",
 
-    if file.filename == "":
+            "filename":
+                filename,
+
+            "file_type":
+                filename.rsplit(
+                    ".",
+                    1
+                )[1].lower()
+
+        }), 200
+
+    except Exception as e:
+
+        print(
+            "UPLOAD ERROR:",
+            str(e)
+        )
+
         return jsonify({
-            "message": "Empty filename"
-        }), 400
 
-    filepath = os.path.join(
-        app.config["UPLOAD_FOLDER"],
-        file.filename
-    )
+            "message":
+                str(e)
 
-    file.save(filepath)
-
-    print("\n========== DATASET UPLOADED ==========")
-    print(filepath)
-    print("======================================\n")
-
-    return jsonify({
-        "message": "Dataset Uploaded Successfully",
-        "filename": file.filename
-    })
+        }), 500
 
 
-# ============================================
-# Preprocessing API
-# ============================================
-@app.route("/preprocess", methods=["POST"])
+# ============================================================
+# PREPROCESSING API
+# ============================================================
+
+@app.route(
+    "/preprocess",
+    methods=["POST"]
+)
 def preprocess():
 
-    upload_folder = app.config["UPLOAD_FOLDER"]
+    try:
 
-    files = [
-        f for f in os.listdir(upload_folder)
-        if f.endswith(".csv") and f != "processed_dataset.csv"
-    ]
+        upload_folder = (
+            app.config["UPLOAD_FOLDER"]
+        )
 
-    if len(files) == 0:
+        # ----------------------------------------------------
+        # Find uploaded datasets
+        # ----------------------------------------------------
+
+        files = [
+
+            f
+
+            for f in os.listdir(
+                upload_folder
+            )
+
+            if (
+
+                f.lower().endswith(
+                    ".csv"
+                )
+
+                or
+
+                f.lower().endswith(
+                    ".xlsx"
+                )
+
+            )
+
+            and f != "processed_dataset.csv"
+
+        ]
+
+        # ----------------------------------------------------
+        # No dataset
+        # ----------------------------------------------------
+
+        if len(files) == 0:
+
+            return jsonify({
+
+                "message":
+                    "No uploaded dataset found."
+
+            }), 400
+
+        # ----------------------------------------------------
+        # Latest dataset
+        # ----------------------------------------------------
+
+        latest_file = max(
+
+            [
+
+                os.path.join(
+                    upload_folder,
+                    f
+                )
+
+                for f in files
+
+            ],
+
+            key=os.path.getmtime
+
+        )
+
+        print(
+            "\n========== PREPROCESSING =========="
+        )
+
+        print(
+            "Dataset:",
+            latest_file
+        )
+
+        # ----------------------------------------------------
+        # Run preprocessing
+        # ----------------------------------------------------
+
+        df, summary = preprocess_dataset(
+            latest_file
+        )
+
+        # ----------------------------------------------------
+        # Save processed dataset
+        # ----------------------------------------------------
+
+        processed_file = os.path.join(
+
+            upload_folder,
+
+            "processed_dataset.csv"
+
+        )
+
+        df.to_csv(
+
+            processed_file,
+
+            index=False
+
+        )
+
+        # ----------------------------------------------------
+        # Print summary
+        # ----------------------------------------------------
+
+        print(
+            "\n========== PREPROCESSING SUMMARY =========="
+        )
+
+        print(
+            summary
+        )
+
+        print(
+            "===========================================\n"
+        )
+
+        # ----------------------------------------------------
+        # Response
+        # ----------------------------------------------------
+
         return jsonify({
-            "message": "No uploaded dataset found."
-        }), 400
 
-    latest_file = max(
-        [os.path.join(upload_folder, f) for f in files],
-        key=os.path.getmtime
-    )
+            "message":
+                "Preprocessing Completed Successfully",
 
-    print("\n========== PREPROCESSING ==========")
-    print("Dataset :", latest_file)
+            "rows":
+                summary.get(
+                    "rows",
+                    0
+                ),
 
-    df, summary = preprocess_dataset(latest_file)
+            "columns":
+                summary.get(
+                    "columns",
+                    0
+                ),
 
-    processed_file = os.path.join(
-        upload_folder,
-        "processed_dataset.csv"
-    )
+            "missing_removed":
+                summary.get(
+                    "missing_removed",
+                    0
+                ),
 
-    df.to_csv(
-        processed_file,
-        index=False
-    )
+            "duplicate_removed":
+                summary.get(
+                    "duplicate_removed",
+                    0
+                ),
 
-    print("\n========== SUMMARY ==========")
-    print(summary)
-    print("=============================\n")
+            "encoded_columns":
+                summary.get(
+                    "encoded_columns",
+                    0
+                ),
 
-    return jsonify({
+            "scaled_columns":
+                summary.get(
+                    "scaled_columns",
+                    0
+                ),
 
-        "message": "Preprocessing Completed Successfully",
+            "target_column":
+                summary.get(
+                    "target_column",
+                    None
+                ),
 
-        "rows": summary["rows"],
+            "processed_file":
+                "processed_dataset.csv"
 
-        "columns": summary["columns"],
+        }), 200
 
-        "missing_removed": summary["missing_removed"],
+    except Exception as e:
 
-        "duplicate_removed": summary["duplicate_removed"],
+        print(
+            "\n========== PREPROCESSING ERROR =========="
+        )
 
-        "encoded_columns": summary["encoded_columns"],
+        print(
+            str(e)
+        )
 
-        "scaled_columns": summary["scaled_columns"],
+        print(
+            "=========================================\n"
+        )
 
-        "processed_file": "processed_dataset.csv"
+        return jsonify({
 
-    })
+            "message":
+                str(e)
 
+        }), 500
+
+
+# ============================================================
+# TRAINING API
+# ============================================================
 
 # ============================================
 # Train Model API
 # ============================================
-# ============================================
-# Diagnosis API
-# ============================================
-
-@app.route("/diagnosis", methods=["POST"])
-def diagnosis():
-
-    try:
-
-        data = request.json
-
-        input_data = [
-
-            data["Electrode_Thickness"],
-            data["Coating_Weight"],
-            data["Coating_Uniformity"],
-            data["Slurry_Viscosity"],
-            data["Drying_Temperature"],
-            data["Drying_Time"],
-            data["Calender_Pressure"],
-            data["Roller_Speed"],
-            data["Electrode_Density"],
-            data["Moisture_Content"],
-            data["Surface_Roughness"],
-            data["Adhesion_Strength"],
-            data["Ambient_Humidity"],
-            data["Ambient_Temperature"]
-
-        ]
-
-        result = predict_quality(input_data)
-
-        return jsonify(result)
-
-    except Exception as e:
-
-        return jsonify({
-            "message": str(e)
-        }), 500
-
 @app.route("/train", methods=["POST"])
 def train():
 
-    print("\n========== TRAIN API CALLED ==========")
+    print("\n========================================")
+    print("TRAIN API CALLED")
+    print("========================================")
 
     processed_file = os.path.join(
         app.config["UPLOAD_FOLDER"],
@@ -182,6 +450,10 @@ def train():
     )
 
     print("Dataset :", processed_file)
+
+    # ----------------------------------------
+    # Check processed dataset
+    # ----------------------------------------
 
     if not os.path.exists(processed_file):
 
@@ -193,97 +465,676 @@ def train():
 
     try:
 
-        print("Calling train_models()...")
+        # ------------------------------------
+        # Read frontend request
+        # ------------------------------------
 
-        result = train_models(processed_file)
+        data = request.get_json(
+            silent=True
+        ) or {}
 
-        print("Training Finished Successfully")
+        print("\n========== TRAINING CONFIG ==========")
+        print("Request Data :", data)
 
-        return jsonify(result)
+        # ------------------------------------
+        # Selected Models
+        # ------------------------------------
+
+        selected_models = data.get(
+            "selected_models",
+            [
+                "XGBoost",
+                "LightGBM",
+                "Random Forest",
+                "SVM"
+            ]
+        )
+
+        # ------------------------------------
+        # Train/Test Split
+        # ------------------------------------
+
+        test_size = float(
+            data.get(
+                "test_size",
+                0.20
+            )
+        )
+
+        # ------------------------------------
+        # Random State
+        # ------------------------------------
+
+        random_state = int(
+            data.get(
+                "random_state",
+                42
+            )
+        )
+
+        # ------------------------------------
+        # Cross Validation
+        # ------------------------------------
+
+        cv_folds = int(
+            data.get(
+                "cv_folds",
+                5
+            )
+        )
+
+        print(
+            "Selected Models :",
+            selected_models
+        )
+
+        print(
+            "Test Size       :",
+            test_size
+        )
+
+        print(
+            "Random State    :",
+            random_state
+        )
+
+        print(
+            "CV Folds        :",
+            cv_folds
+        )
+
+        print(
+            "====================================\n"
+        )
+
+        # ------------------------------------
+        # Validation
+        # ------------------------------------
+
+        allowed_models = {
+            "XGBoost",
+            "LightGBM",
+            "Random Forest",
+            "SVM"
+        }
+
+        invalid_models = [
+            model
+            for model in selected_models
+            if model not in allowed_models
+        ]
+
+        if invalid_models:
+
+            return jsonify({
+                "message": (
+                    "Invalid model(s) selected: "
+                    + ", ".join(invalid_models)
+                )
+            }), 400
+
+        if len(selected_models) == 0:
+
+            return jsonify({
+                "message":
+                    "Please select at least one model."
+            }), 400
+
+        if not 0 < test_size < 1:
+
+            return jsonify({
+                "message":
+                    "Test size must be between 0 and 1."
+            }), 400
+
+        if cv_folds < 2:
+
+            return jsonify({
+                "message":
+                    "Cross validation must have at least 2 folds."
+            }), 400
+
+        # ------------------------------------
+        # Train Models
+        # ------------------------------------
+
+        print(
+            "Calling train_models()..."
+        )
+
+        result = train_models(
+
+            processed_file,
+
+            selected_models=selected_models,
+
+            test_size=test_size,
+
+            random_state=random_state,
+
+            cv_folds=cv_folds
+
+        )
+
+        # ------------------------------------
+        # Training Finished
+        # ------------------------------------
+
+        print(
+            "\nTraining Finished Successfully"
+        )
+
+        print(
+            "Best Model :",
+            result.get("best_model")
+        )
+
+        print(
+            "====================================\n"
+        )
+
+        return jsonify(result), 200
 
     except Exception as e:
 
-        print("\n========== TRAINING ERROR ==========")
-        print(e)
-        print("====================================\n")
+        print(
+            "\n========== TRAINING ERROR =========="
+        )
+
+        print(
+            type(e).__name__,
+            ":",
+            str(e)
+        )
+
+        print(
+            "====================================\n"
+        )
 
         return jsonify({
             "message": str(e)
         }), 500
-    
-    # ============================================
-# Prognosis API
-# ============================================
 
-@app.route("/prognosis", methods=["POST"])
+# ============================================================
+# MODEL STATUS API
+# ============================================================
+
+@app.route(
+    "/model-status",
+    methods=["GET"]
+)
+def model_status():
+
+    try:
+
+        trained_model_folder = os.path.join(
+            BASE_DIR,
+            "trained_models"
+        )
+
+        best_model_file = os.path.join(
+            trained_model_folder,
+            "best_model.txt"
+        )
+
+        if not os.path.exists(best_model_file):
+
+            return jsonify({
+
+                "trained": False,
+
+                "message":
+                    "No trained model found."
+
+            }), 200
+
+        with open(
+            best_model_file,
+            "r",
+            encoding="utf-8"
+        ) as file:
+
+            best_model = file.read().strip()
+
+        model_file = os.path.join(
+            trained_model_folder,
+            best_model.lower().replace(" ", "_") + ".pkl"
+        )
+
+        return jsonify({
+
+            "trained":
+                os.path.exists(model_file),
+
+            "best_model":
+                best_model,
+
+            "model_file":
+                os.path.basename(model_file)
+
+        }), 200
+
+    except Exception as e:
+
+        return jsonify({
+
+            "trained": False,
+
+            "message":
+                str(e)
+
+        }), 500
+
+
+# ============================================================
+# DIAGNOSIS API
+# ============================================================
+
+@app.route(
+    "/diagnosis",
+    methods=["POST"]
+)
+def diagnosis():
+
+    try:
+
+        # ----------------------------------------------------
+        # Get JSON
+        # ----------------------------------------------------
+
+        data = request.get_json(
+            silent=True
+        )
+
+        if not data:
+
+            return jsonify({
+
+                "message":
+                    "No input data received."
+
+            }), 400
+
+        # ----------------------------------------------------
+        # Required features
+        # ----------------------------------------------------
+
+        required_features = [
+
+            "Electrode_Thickness",
+
+            "Coating_Weight",
+
+            "Coating_Uniformity",
+
+            "Slurry_Viscosity",
+
+            "Drying_Temperature",
+
+            "Drying_Time",
+
+            "Calender_Pressure",
+
+            "Roller_Speed",
+
+            "Electrode_Density",
+
+            "Moisture_Content",
+
+            "Surface_Roughness",
+
+            "Adhesion_Strength",
+
+            "Ambient_Humidity",
+
+            "Ambient_Temperature"
+
+        ]
+
+        # ----------------------------------------------------
+        # Validate features
+        # ----------------------------------------------------
+
+        missing_features = [
+
+            feature
+
+            for feature in required_features
+
+            if feature not in data
+
+        ]
+
+        if missing_features:
+
+            return jsonify({
+
+                "message":
+                    "Missing required features.",
+
+                "missing_features":
+                    missing_features
+
+            }), 400
+
+        # ----------------------------------------------------
+        # Convert input values
+        # ----------------------------------------------------
+
+        try:
+
+            input_data = [
+
+                float(
+                    data[feature]
+                )
+
+                for feature in required_features
+
+            ]
+
+        except (
+            ValueError,
+            TypeError
+        ):
+
+            return jsonify({
+
+                "message":
+                    "All manufacturing parameters must be numeric."
+
+            }), 400
+
+        # ----------------------------------------------------
+        # Prediction
+        # ----------------------------------------------------
+
+        print(
+            "\n========== DIAGNOSIS API =========="
+        )
+
+        print(
+            "Input:",
+            input_data
+        )
+
+        result = predict_quality(
+            input_data
+        )
+
+        print(
+            "Diagnosis Result:",
+            result
+        )
+
+        print(
+            "===================================\n"
+        )
+
+        return jsonify(
+            result
+        ), 200
+
+    except Exception as e:
+
+        print(
+            "\n========== DIAGNOSIS ERROR =========="
+        )
+
+        print(
+            type(e).__name__,
+            ":",
+            str(e)
+        )
+
+        print(
+            "=====================================\n"
+        )
+
+        return jsonify({
+
+            "message":
+                str(e)
+
+        }), 500
+
+
+# ============================================================
+# PROGNOSIS API
+# ============================================================
+
+@app.route(
+    "/prognosis",
+    methods=["POST"]
+)
 def prognosis():
 
     try:
 
-        data = request.json
+        # ----------------------------------------------------
+        # Get JSON
+        # ----------------------------------------------------
 
-        input_data = [
+        data = request.get_json(
+            silent=True
+        )
 
-            data["Electrode_Thickness"],
-            data["Coating_Weight"],
-            data["Coating_Uniformity"],
-            data["Slurry_Viscosity"],
-            data["Drying_Temperature"],
-            data["Drying_Time"],
-            data["Calender_Pressure"],
-            data["Roller_Speed"],
-            data["Electrode_Density"],
-            data["Moisture_Content"],
-            data["Surface_Roughness"],
-            data["Adhesion_Strength"],
-            data["Ambient_Humidity"],
-            data["Ambient_Temperature"]
+        if not data:
+
+            return jsonify({
+
+                "message":
+                    "No input data received."
+
+            }), 400
+
+        # ----------------------------------------------------
+        # Required features
+        # ----------------------------------------------------
+
+        required_features = [
+
+            "Electrode_Thickness",
+
+            "Coating_Weight",
+
+            "Coating_Uniformity",
+
+            "Slurry_Viscosity",
+
+            "Drying_Temperature",
+
+            "Drying_Time",
+
+            "Calender_Pressure",
+
+            "Roller_Speed",
+
+            "Electrode_Density",
+
+            "Moisture_Content",
+
+            "Surface_Roughness",
+
+            "Adhesion_Strength",
+
+            "Ambient_Humidity",
+
+            "Ambient_Temperature"
 
         ]
 
-        result = predict_future_quality(input_data)
+        # ----------------------------------------------------
+        # Validate
+        # ----------------------------------------------------
 
-        return jsonify(result)
+        missing_features = [
+
+            feature
+
+            for feature in required_features
+
+            if feature not in data
+
+        ]
+
+        if missing_features:
+
+            return jsonify({
+
+                "message":
+                    "Missing required features.",
+
+                "missing_features":
+                    missing_features
+
+            }), 400
+
+        # ----------------------------------------------------
+        # Convert input
+        # ----------------------------------------------------
+
+        try:
+
+            input_data = [
+
+                float(
+                    data[feature]
+                )
+
+                for feature in required_features
+
+            ]
+
+        except (
+            ValueError,
+            TypeError
+        ):
+
+            return jsonify({
+
+                "message":
+                    "All manufacturing parameters must be numeric."
+
+            }), 400
+
+        # ----------------------------------------------------
+        # Prognosis
+        # ----------------------------------------------------
+
+        print(
+            "\n========== PROGNOSIS API =========="
+        )
+
+        result = predict_future_quality(
+            input_data
+        )
+
+        print(
+            "Prognosis Result:",
+            result
+        )
+
+        print(
+            "===================================\n"
+        )
+
+        return jsonify(
+            result
+        ), 200
 
     except Exception as e:
 
+        print(
+            "\n========== PROGNOSIS ERROR =========="
+        )
+
+        print(
+            type(e).__name__,
+            ":",
+            str(e)
+        )
+
+        print(
+            "=====================================\n"
+        )
+
         return jsonify({
 
-            "message": str(e)
+            "message":
+                str(e)
 
         }), 500
 
 
-# ============================================
-# reports
-# ============================================
-@app.route("/report", methods=["GET"])
+# ============================================================
+# REPORT API
+# ============================================================
+
+@app.route(
+    "/report",
+    methods=["GET"]
+)
 def report():
 
     try:
 
         result = generate_report()
 
-        return jsonify(result)
+        return jsonify(
+            result
+        ), 200
 
     except Exception as e:
 
+        print(
+            "\n========== REPORT ERROR =========="
+        )
+
+        print(
+            str(e)
+        )
+
+        print(
+            "==================================\n"
+        )
+
         return jsonify({
 
-            "message": str(e)
+            "message":
+                str(e)
 
         }), 500
-# ============================================
-# Run Flask Server
-# ============================================
+
+
+# ============================================================
+# RUN FLASK SERVER
+# ============================================================
+
 if __name__ == "__main__":
 
-    print("\n====================================")
-    print("Starting Flask Server...")
-    print("====================================\n")
+    print(
+        "\n===================================="
+    )
+
+    print(
+        " Intelligent Electrode Quality Control"
+    )
+
+    print(
+        " Flask Backend Starting..."
+    )
+
+    print(
+        "====================================\n"
+    )
 
     app.run(
+
         host="0.0.0.0",
+
         port=5000,
+
         debug=True
+
     )
