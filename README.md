@@ -1,6 +1,6 @@
 # Intelligent Electrode Quality Control System
 
-A full-stack battery electrode quality-control application for uploading manufacturing datasets, preprocessing data, training machine-learning models, diagnosing electrode quality, forecasting future quality, and reviewing reports.
+A full-stack battery electrode quality-control application for uploading manufacturing datasets, preprocessing data, training machine-learning models, diagnosing electrode quality, and forecasting future quality.
 
 ## Features
 
@@ -12,7 +12,6 @@ A full-stack battery electrode quality-control application for uploading manufac
 - Diagnose electrode quality from manufacturing parameters
 - Predict future quality trends
 - Check trained-model status
-- Generate quality reports
 
 ## Technology Stack
 
@@ -47,7 +46,6 @@ A full-stack battery electrode quality-control application for uploading manufac
 │           ├── diagnosis/
 │           ├── preprocessing/
 │           ├── prognosis/
-│           ├── reports/
 │           ├── training/
 │           ├── trained_models/
 │           └── uploads/
@@ -115,7 +113,7 @@ Open the local URL printed by Vite, usually `http://localhost:5173`.
 3. Run preprocessing to create `server/uploads/processed_dataset.csv`.
 4. Select models and training parameters, then train the models.
 5. Use Diagnosis or Prognosis with the manufacturing feature values.
-6. Check model status using the `/model-status` API. The Reports page and `/report` endpoint currently show fixed demonstration data, not persisted live prediction history.
+6. Check model status using the `/model-status` API.
 
 The diagnosis and prognosis endpoints expect these numeric features:
 
@@ -145,7 +143,6 @@ The diagnosis and prognosis endpoints expect these numeric features:
 | `GET` | `/model-status` | Check whether a trained model is available |
 | `POST` | `/diagnosis` | Classify electrode quality from manufacturing parameters |
 | `POST` | `/prognosis` | Predict future quality from manufacturing parameters |
-| `GET` | `/report` | Return a demonstration report with fixed sample values |
 
 Example health check:
 
@@ -186,4 +183,3 @@ Uploaded files and generated artifacts are stored under `battery-quality-control
 - The frontend currently calls the backend at `http://127.0.0.1:5000` directly.
 - CORS is enabled by the Flask backend for local development.
 - The backend runs with Flask debug mode enabled when started directly; disable debug mode before production deployment.
-- The Reports page and `/report` endpoint currently contain hard-coded demonstration data; prediction history is not persisted by the report feature.
