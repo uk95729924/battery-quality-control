@@ -32,7 +32,7 @@ A full-stack battery electrode quality-control application for uploading manufac
 - Flask and Flask-Cors
 - pandas and NumPy
 - scikit-learn
-- XGBoost, LightGBM, and CatBoost
+- XGBoost, LightGBM, Random Forest, and SVM
 - SHAP, joblib, matplotlib, and openpyxl
 
 ## Project Structure
@@ -56,7 +56,7 @@ A full-stack battery electrode quality-control application for uploading manufac
 
 ## Prerequisites
 
-- Node.js 18 or later
+- Node.js `^20.19.0` or `>=22.12.0` (required by the project's Vite 8.1)
 - npm
 - Python 3.9 or later
 - pip
@@ -110,12 +110,12 @@ Open the local URL printed by Vite, usually `http://localhost:5173`.
 
 ## Typical Workflow
 
-1. Register or sign in from the frontend.
+1. Register or sign in from the frontend. This is a local demo flow stored in browser `localStorage`; it is not server-backed authentication.
 2. Upload a `.csv` or `.xlsx` dataset from the Upload Dataset page.
 3. Run preprocessing to create `server/uploads/processed_dataset.csv`.
 4. Select models and training parameters, then train the models.
 5. Use Diagnosis or Prognosis with the manufacturing feature values.
-6. Review model status and report information from the Reports page.
+6. Check model status using the `/model-status` API. The Reports page and `/report` endpoint currently show fixed demonstration data, not persisted live prediction history.
 
 The diagnosis and prognosis endpoints expect these numeric features:
 
@@ -145,7 +145,7 @@ The diagnosis and prognosis endpoints expect these numeric features:
 | `GET` | `/model-status` | Check whether a trained model is available |
 | `POST` | `/diagnosis` | Classify electrode quality from manufacturing parameters |
 | `POST` | `/prognosis` | Predict future quality from manufacturing parameters |
-| `GET` | `/report` | Generate the current quality report |
+| `GET` | `/report` | Return a demonstration report with fixed sample values |
 
 Example health check:
 
@@ -179,11 +179,11 @@ npm run lint      # Run ESLint
 
 ## Data and Generated Files
 
-Uploaded files and generated artifacts are stored under `client/server/uploads/` and `client/server/trained_models/`. The repository includes sample datasets and model metadata for development. Avoid committing sensitive production data or newly generated model artifacts.
+Uploaded files and generated artifacts are stored under `battery-quality-control/client/server/uploads/` and `battery-quality-control/client/server/trained_models/`. The repository includes sample datasets and model metadata for development. Avoid committing sensitive production data or newly generated model artifacts.
 
 ## Notes
 
 - The frontend currently calls the backend at `http://127.0.0.1:5000` directly.
 - CORS is enabled by the Flask backend for local development.
 - The backend runs with Flask debug mode enabled when started directly; disable debug mode before production deployment.
-- The Reports page currently contains demonstration summary and prediction-history data rather than a complete persisted prediction history.
+- The Reports page and `/report` endpoint currently contain hard-coded demonstration data; prediction history is not persisted by the report feature.
